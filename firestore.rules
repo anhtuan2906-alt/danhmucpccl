@@ -1,0 +1,84 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Firebase Auth UID)
+    // Fields:
+    //   - uid: string (required) - The unique identifier for the user.
+    //   - email: string (required, email format) - The user's email address.
+    //   - displayName: string (optional) - The user's display name.
+    //   - photoURL: string (optional) - The user's profile photo URL.
+    //   - role: string (required, enum: ['admin', 'user']) - The user's role.
+    //   - createdAt: timestamp (required) - When the user profile was created.
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' ||
+          (request.auth.token.email == "anhtuandao2906@gmail.com" && request.auth.token.email_verified == true));
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.role in ['admin', 'user'] &&
+             (data.displayName == null || (data.displayName is string && data.displayName.size() < 100)) &&
+             (data.photoURL == null || (data.photoURL is string && data.photoURL.size() < 500));
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /test/{document=**} {
+      allow read, write: if true;
+    }
+
+    match /users/{userId} {
+      // Users can read their own profile, admins can read all profiles
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // Users can create their own profile with 'user' role
+      allow create: if isOwner(userId) && 
+                      isValidUser(request.resource.data) && 
+                      request.resource.data.role == 'user';
+                      
+      // Admins can create any profile
+      allow create: if isAdmin() && isValidUser(request.resource.data);
+      
+      // Users can update their own profile but NOT their role
+      allow update: if isOwner(userId) && 
+                      isValidUser(request.resource.data) && 
+                      request.resource.data.role == resource.data.role;
+                      
+      // Admins can update any profile
+      allow update: if isAdmin() && isValidUser(request.resource.data);
+      
+      // Only admins can delete profiles
+      allow delete: if isAdmin();
+    }
+  }
+}
