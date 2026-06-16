@@ -909,7 +909,7 @@ export default function App() {
                         setImportProjectSearchTerm('');
                         setShowImportProjectDropdown(true);
                       }}
-                      placeholder="Nhập tên để tìm kiếm..."
+                      placeholder="Nhập tên hoặc mã CT để tìm kiếm..."
                       className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-slate-700 shadow-sm"
                     />
                     {showImportProjectDropdown && (
