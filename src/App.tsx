@@ -1467,7 +1467,7 @@ export default function App() {
                       {/* Custom headers based on the CSV structure we saw */}
                       <th className="px-4 py-3 font-semibold border-b border-slate-200">STT</th>
                       <th className="px-4 py-3 font-semibold border-b border-slate-200">TÊN VĂN BẢN</th>
-                      <th className="px-4 py-3 font-semibold border-b border-slate-200">SỐ VB</th>
+                      <th className="px-4 py-3 font-semibold border-b border-slate-200 w-32 max-w-[160px]">SỐ VB</th>
                       <th className="px-4 py-3 font-semibold border-b border-slate-200">NGÀY VB</th>
                       <th className="px-4 py-3 font-semibold border-b border-slate-200">FILE VB</th>
                       <th className="px-4 py-3 font-semibold border-b border-slate-200">CƠ QUAN BAN HÀNH</th>
@@ -1494,7 +1494,7 @@ export default function App() {
                             ) : row[0]}
                           </td>
                           <td className="px-4 py-3 border-r border-slate-100 whitespace-normal min-w-[300px] text-slate-700">{row[1]}</td>
-                          <td className="px-4 py-3 border-r border-slate-100 text-center">{row[3]}</td>
+                          <td className="px-4 py-3 border-r border-slate-100 text-center whitespace-normal w-32 max-w-[160px] break-words">{row[3]}</td>
                           <td className="px-4 py-3 border-r border-slate-100">{row[4]}</td>
                           <td className="px-4 py-3 border-r border-slate-100">
                             {row[5] && (row[5].startsWith('http://') || row[5].startsWith('https://')) ? (
