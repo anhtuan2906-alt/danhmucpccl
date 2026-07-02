@@ -1,28 +1,31 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 
-interface Props {
+interface ErrorBoundaryProps {
   children?: ReactNode;
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
   error?: Error;
 }
 
-export default class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false
-  };
+class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
+    super(props);
+    this.state = {
+      hasError: false
+    };
+  }
 
-  public static getDerivedStateFromError(error: Error): State {
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     return { hasError: true, error };
   }
 
-  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
   }
 
-  public render() {
+  render() {
     if (this.state.hasError) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 text-gray-900 p-4">
@@ -41,3 +44,5 @@ export default class ErrorBoundary extends Component<Props, State> {
     return this.props.children;
   }
 }
+
+export default ErrorBoundary;

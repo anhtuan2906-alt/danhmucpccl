@@ -3,6 +3,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx-js-style';
 import { Settings, RefreshCw, FilePlus, Database, Download, ExternalLink, AlertCircle, X, ChevronDown, Eye, Lock, User as UserIcon, LogIn, LogOut, Filter } from 'lucide-react';
 import { EVN_HCMC_LOGO } from "./assets/logo";
+import { loadProjectData } from "./services/dataService";
 
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/14BF0RUfBq-Arl6ngVvD44fQnNayBEC1Xtz-RFgzA4GI/export?format=csv&gid=0';
 const PROJECTS_CSV_URL = 'https://docs.google.com/spreadsheets/d/14BF0RUfBq-Arl6ngVvD44fQnNayBEC1Xtz-RFgzA4GI/export?format=csv&gid=1152018861'; // Using gid for 'Thông tin theo MCT' if known, or gviz. Let's use gviz to be safe.
@@ -32,7 +33,15 @@ export default function App() {
   const [isLoggingIn, setIsLoggingIn] = useState(false);
 
   const [data, setData] = useState<string[][]>([]);
-  const [projectInfo, setProjectInfo] = useState<Record<string, string>>({});
+  const [projectInfo, setProjectInfo] = useState<Record<string, string>>({
+    "Tên dự án/công trình": "",
+    "Mã công trình": "",
+    "Chủ Đầu Tư": "",
+    "Địa điểm xây dựng": "",
+    "Đơn vị TV Thiết Kế": "",
+    "Đơn vị TV Giám sát": "",
+    "Đơn vị thi công": ""
+  });
   const [availableProjects, setAvailableProjects] = useState<Record<string, string>[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +55,8 @@ export default function App() {
   const [collapsedSections, setCollapsedSections] = useState<Set<string>>(new Set());
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
+
+  const [templateCache, setTemplateCache] = useState<string[][] | null>(null);
 
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -107,7 +118,8 @@ export default function App() {
 
   useEffect(() => {
     if (currentUser) {
-      fetchData();
+      fetchProjects(projectInfo);
+      refreshCurrentProjectData(projectInfo["Mã công trình"] || "");
     }
   }, [currentUser]);
 
@@ -319,11 +331,9 @@ export default function App() {
         fileInputRef.current.value = '';
       }
       
-      // Polling for update
+      // Polling for update (just refresh the current project data after a delay)
       if (projectInfo["Mã công trình"]) {
-        setTimeout(() => fetchData(projectInfo["Mã công trình"], 10), 500);
-      } else {
-        setTimeout(() => fetchData(), 500);
+        setTimeout(() => refreshCurrentProjectData(projectInfo["Mã công trình"]), 2000);
       }
       
     } catch (err: any) {
@@ -341,222 +351,22 @@ export default function App() {
     setData([]);
   };
 
-  const fetchData = async (expectedProjectCode?: string, retries = 0) => {
+  const refreshCurrentProjectData = async (projectCode: string) => {
+    if (!projectCode) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
-      // Add timestamp to prevent caching
-      const timestamp = new Date().getTime();
-      const urlWithCacheBuster = `${SHEET_CSV_URL}&t=${timestamp}`;
-      
-      // 1. Fetch CSV data first
-      let response;
-      let fetchError = null;
-      
-      try {
-        response = await fetch(urlWithCacheBuster);
-        if (!response.ok) throw new Error(`Direct fetch failed: ${response.status}`);
-      } catch (e) {
-        fetchError = e;
-        try {
-          response = await fetch(`${PROXY_URL}&t=${timestamp}`);
-          if (!response.ok) throw new Error(`Proxy fetch failed: ${response.status}`);
-        } catch (e2) {
-          fetchError = e2;
-          try {
-            response = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(urlWithCacheBuster)}`);
-            if (!response.ok) throw new Error(`AllOrigins fetch failed: ${response.status}`);
-          } catch (e3) {
-            fetchError = e3;
-            // One last try with another proxy
-            try {
-              response = await fetch(`https://thingproxy.freeboard.io/fetch/${encodeURIComponent(urlWithCacheBuster)}`);
-              if (!response.ok) throw new Error(`ThingProxy fetch failed: ${response.status}`);
-            } catch (e4) {
-              fetchError = e4;
-              throw new Error('Không thể kết nối với dữ liệu Google Sheet. Vui lòng kiểm tra kết nối mạng hoặc thử lại sau.');
-            }
-          }
-        }
-      }
-      
-      if (!response || !response.ok) {
-        throw new Error('Không thể tải dữ liệu từ Google Sheet.');
-      }
-      
-      const csvText = await response.text();
-      
-      // 2. Parse CSV immediately to check for project code match
-      let csvResults: Papa.ParseResult<string[]> | null = null;
-      Papa.parse(csvText, {
-        complete: (results) => {
-            csvResults = results as Papa.ParseResult<string[]>;
-        }
-      });
-      
-      if (!csvResults || !csvResults.data) throw new Error('Failed to parse CSV');
-      
-      const allRows = csvResults.data as string[][];
-      
-      // Extract Project Info from rows 7-13 (approx)
-      const info: Record<string, string> = {};
-      for (let i = 7; i <= 13; i++) {
-        if (allRows[i] && allRows[i][0]) {
-          info[allRows[i][0].replace(':', '').trim()] = allRows[i][2] || '';
-        }
-      }
-
-      // Check if the fetched data matches the expected project
-      const fetchedProjectCode = info["Mã công trình"];
-      
-      if (expectedProjectCode && fetchedProjectCode !== expectedProjectCode) {
-        if (retries > 0) {
-            console.log(`Mismatch: Expected ${expectedProjectCode}, got ${fetchedProjectCode}. Retrying... (${retries} left)`);
-            setTimeout(() => fetchData(expectedProjectCode, retries - 1), 300);
-            return;
-        }
-
-        console.warn(`Mismatch: Expected ${expectedProjectCode}, got ${fetchedProjectCode}`);
-        // Data mismatch - likely Apps Script failed to update or data is empty
-        // We show empty state instead of stale data
-        setData([]);
-        setLoading(false);
-        // We don't overwrite projectInfo here because we want to keep what the user selected
-        return;
-      }
-      
-      // Reorder the keys as requested
-      const orderedInfo: Record<string, string> = {};
-      const desiredOrder = [
-        "Tên dự án/công trình",
-        "Mã công trình",
-        "Chủ Đầu Tư",
-        "Địa điểm xây dựng",
-        "Đơn vị TV Thiết Kế",
-        "Đơn vị TV Giám sát",
-        "Đơn vị thi công"
-      ];
-      
-      desiredOrder.forEach(key => {
-        if (info[key] !== undefined) {
-          orderedInfo[key] = info[key];
-        }
-      });
-      
-      // Add any remaining keys
-      Object.keys(info).forEach(key => {
-        if (orderedInfo[key] === undefined) {
-          orderedInfo[key] = info[key];
-        }
-      });
-
-      setProjectInfo(orderedInfo);
-      
-      // Fetch available projects
-      fetchProjects(orderedInfo);
-
-      // Extract table data (from row 15 onwards)
-      // Row 15 is header, 16+ is data
-      const tableData = allRows.slice(15).filter(row => row.some(cell => cell.trim() !== ''));
-      
-      // Update UI immediately with CSV data (without links)
-      setData([...tableData]);
+      const { finalData, templateRows } = await loadProjectData(projectCode, templateCache || undefined);
+      if (!templateCache) setTemplateCache(templateRows);
+      setData(finalData);
+    } catch(err: any) {
+      setError(err.message || "Failed to refresh data");
+    } finally {
       setLoading(false);
       setLastUpdated(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-
-      // 3. Match found! Now fetch HTML version IN THE BACKGROUND to extract links
-      // We don't block the UI for this
-      (async () => {
-        let htmlText = '';
-        try {
-          const htmlUrl = 'https://docs.google.com/spreadsheets/d/14BF0RUfBq-Arl6ngVvD44fQnNayBEC1Xtz-RFgzA4GI/htmlview/sheet?headers=true&gid=0';
-          let htmlResponse;
-          try {
-            htmlResponse = await fetch(htmlUrl);
-            if (!htmlResponse.ok) throw new Error('Direct fetch failed');
-          } catch (e) {
-            try {
-              htmlResponse = await fetch(`https://corsproxy.io/?${encodeURIComponent(htmlUrl)}`);
-              if (!htmlResponse.ok) throw new Error('Proxy fetch failed');
-            } catch (e2) {
-              htmlResponse = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(htmlUrl)}`);
-            }
-          }
-          if (htmlResponse && htmlResponse.ok) {
-            htmlText = await htmlResponse.text();
-          }
-        } catch (e) {
-          console.warn('Could not fetch HTML version for links');
-        }
-        
-        // Parse HTML to extract links if available
-        const linkMap = new Map<string, string>();
-        if (htmlText) {
-          // Parse the table structure
-          try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(htmlText, 'text/html');
-            const rows = doc.querySelectorAll('table tbody tr');
-            
-            rows.forEach(row => {
-              const cells = row.querySelectorAll('td');
-              // Usually column 1 is Tên văn bản
-              if (cells.length > 1) {
-                const textCell = cells[1];
-                const textContent = textCell.textContent?.replace(/\s+/g, ' ').trim();
-                
-                // Find the link anywhere in the row
-                const linkElement = row.querySelector('a');
-                
-                if (textContent && linkElement && linkElement.href) {
-                  let href = linkElement.href;
-                  if (href.includes('google.com/url?')) {
-                    try {
-                      const urlParams = new URLSearchParams(href.split('?')[1]);
-                      const q = urlParams.get('q');
-                      if (q) href = q;
-                    } catch (e) {
-                      // Ignore parsing errors
-                    }
-                  }
-                  linkMap.set(textContent, href);
-                }
-              }
-            });
-            console.log(`Extracted ${linkMap.size} links from HTML`);
-          } catch (e) {
-            console.warn('Error parsing HTML table', e);
-          }
-        }
-        
-        // 4. Apply extracted links to the data and update state again
-        if (linkMap.size > 0) {
-          setData(prevData => {
-            // Safety check: if data was cleared or changed significantly (e.g. user selected another project), don't apply links
-            if (prevData.length === 0 || (tableData.length > 0 && prevData[0] && prevData[0][1] !== tableData[0][1])) {
-              return prevData;
-            }
-            
-            const newData = [...prevData];
-            let updated = false;
-            for (let i = 0; i < newData.length; i++) {
-              if (newData[i] && newData[i][5]?.trim().toLowerCase() === 'xem file') {
-                const textToMatch = newData[i][1]?.replace(/\s+/g, ' ').trim();
-                if (textToMatch && linkMap.has(textToMatch)) {
-                  newData[i] = [...newData[i]]; // Clone row
-                  newData[i][5] = linkMap.get(textToMatch)!;
-                  updated = true;
-                }
-              }
-            }
-            return updated ? newData : prevData;
-          });
-        }
-      })();
-
-    } catch (err: any) {
-      setError(err.message);
-      setLoading(false);
     }
   };
 
@@ -641,6 +451,11 @@ export default function App() {
           );
           
           setAvailableProjects(uniqueProjects);
+          
+          if (uniqueProjects.length > 0 && (!currentProjectInfo || !currentProjectInfo["Mã công trình"])) {
+            setProjectInfo(uniqueProjects[0]);
+            refreshCurrentProjectData(uniqueProjects[0]["Mã công trình"]);
+          }
         }
       });
     } catch (err) {
@@ -681,9 +496,9 @@ export default function App() {
       // If we are updating project info, we expect the sheet to reflect this project
       if (actionId === 'updateProjectInfo' && params["Mã công trình"]) {
         // Use more frequent retries (30 attempts * 300ms = 9s max) to catch the update as soon as it happens
-        fetchData(params["Mã công trình"], 30);
+        refreshCurrentProjectData(params["Mã công trình"]);
       } else {
-        fetchData();
+        refreshCurrentProjectData(projectInfo["Mã công trình"] || "");
       }
       
     } catch (err: any) {
@@ -875,7 +690,9 @@ export default function App() {
                   onClick={() => {
                     setShowImportModal(false);
                     setImportMessage(null);
-                    fetchData();
+                    if (projectInfo["Mã công trình"]) {
+                      refreshCurrentProjectData(projectInfo["Mã công trình"]);
+                    }
                   }}
                   className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-all"
                   title="Đóng cửa sổ"
@@ -1041,7 +858,9 @@ export default function App() {
                   onClick={() => {
                     setShowImportModal(false);
                     setImportMessage(null);
-                    fetchData();
+                    if (projectInfo["Mã công trình"]) {
+                      refreshCurrentProjectData(projectInfo["Mã công trình"]);
+                    }
                   }}
                   className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-bold transition-colors shadow-sm"
                 >
@@ -1335,17 +1154,21 @@ export default function App() {
                                 <div 
                                   key={i}
                                   className="px-4 py-2 hover:bg-emerald-50 cursor-pointer border-b border-slate-50 last:border-0 leading-relaxed"
-                                  onClick={() => {
+                                  onClick={async () => {
                                     setProjectInfo(p);
                                     setData([]);
                                     setLoading(true);
                                     setShowDropdown(false);
                                     setProjectSearchTerm('');
-                                    if (scriptUrl) {
-                                      triggerAction('Cập nhật Thông tin dự án', 'updateProjectInfo', p);
-                                    } else {
-                                      alert('Vui lòng cài đặt Apps Script Web App URL (biểu tượng bánh răng góc trên bên phải) để có thể đồng bộ dữ liệu lên Google Sheet.');
+                                    try {
+                                      const { finalData, templateRows } = await loadProjectData(p["Mã công trình"], templateCache || undefined);
+                                      if (!templateCache) setTemplateCache(templateRows);
+                                      setData(finalData);
+                                    } catch(e: any) {
+                                      setError(e.message || "Failed to load project data");
+                                    } finally {
                                       setLoading(false);
+                                      setLastUpdated(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
                                     }
                                   }}
                                 >
