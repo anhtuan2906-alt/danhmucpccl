@@ -189,6 +189,7 @@ export default function App() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<{type: 'error' | 'success', text: string} | null>(null);
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [rawDropdownData, setRawDropdownData] = useState<{phongBan: string, noiDung: string}[]>([]);
 
   // Fetch Dropdown sheet content
@@ -314,7 +315,7 @@ export default function App() {
       });
 
       // Show success, and schedule a data fetch
-      setImportMessage({ type: 'success', text: 'Lưu dữ liệu thành công!' });
+      setShowSuccessDialog(true);
       
       // Reset form variables to original states while preserving the active department
       setImportForm(prev => ({
@@ -690,6 +691,7 @@ export default function App() {
                   onClick={() => {
                     setShowImportModal(false);
                     setImportMessage(null);
+                    setShowSuccessDialog(false);
                     if (projectInfo["Mã công trình"]) {
                       refreshCurrentProjectData(projectInfo["Mã công trình"]);
                     }
@@ -845,9 +847,9 @@ export default function App() {
                     {isImporting ? 'ĐANG LƯU...' : 'LƯU'}
                   </button>
 
-                  {importMessage && (
-                    <div className={`mt-4 text-sm font-bold flex items-center justify-center gap-2 ${importMessage.type === 'error' ? 'text-red-600' : 'text-emerald-600'}`}>
-                      {importMessage.type === 'error' ? <X className="w-5 h-5 font-bold" /> : <div className="w-2 h-2 rounded-full bg-emerald-600"></div>}
+                  {importMessage && importMessage.type === 'error' && (
+                    <div className="mt-4 text-sm font-bold flex items-center justify-center gap-2 text-red-600">
+                      <X className="w-5 h-5 font-bold" />
                       {importMessage.text}
                     </div>
                   )}
@@ -858,6 +860,7 @@ export default function App() {
                   onClick={() => {
                     setShowImportModal(false);
                     setImportMessage(null);
+                    setShowSuccessDialog(false);
                     if (projectInfo["Mã công trình"]) {
                       refreshCurrentProjectData(projectInfo["Mã công trình"]);
                     }
@@ -867,6 +870,27 @@ export default function App() {
                   HOÀN TẤT
                 </button>
               </div>
+
+              {/* Success Dialog Overlay */}
+              {showSuccessDialog && (
+                <div className="absolute inset-0 z-50 flex items-center justify-center bg-white/60 backdrop-blur-sm rounded-2xl">
+                  <div className="bg-white p-6 rounded-xl shadow-xl border border-emerald-100 flex flex-col items-center justify-center text-center max-w-sm w-full mx-4 animate-in fade-in zoom-in duration-200">
+                    <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
+                      <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <h3 className="text-xl font-bold text-slate-800 mb-2">Lưu thành công!</h3>
+                    <p className="text-sm text-slate-500 mb-6">Dữ liệu văn bản đã được cập nhật thành công.</p>
+                    <button 
+                      onClick={() => setShowSuccessDialog(false)}
+                      className="w-full py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold transition-colors"
+                    >
+                      Tiếp tục thêm
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
