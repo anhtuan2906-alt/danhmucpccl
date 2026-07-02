@@ -886,7 +886,7 @@ export default function App() {
                       onClick={() => setShowSuccessDialog(false)}
                       className="w-full py-2.5 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 font-bold transition-colors"
                     >
-                      Tiếp tục thêm
+                      OK
                     </button>
                   </div>
                 </div>
