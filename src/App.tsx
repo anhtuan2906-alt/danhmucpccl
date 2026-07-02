@@ -869,7 +869,7 @@ export default function App() {
               <div className="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-white rounded-t-2xl">
                 <div className="flex items-center gap-2">
                   <Database className="w-5 h-5 text-blue-600" />
-                  <h3 className="font-bold text-slate-800 uppercase text-lg">Nhập dữ liệu</h3>
+                  <h3 className="font-bold text-slate-800 uppercase text-lg">Thêm mới văn bản</h3>
                 </div>
                 <button 
                   onClick={() => {
@@ -1025,7 +1025,7 @@ export default function App() {
                     disabled={isImporting}
                     className="w-full py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-bold transition-colors disabled:bg-blue-400 mt-2 shadow-sm"
                   >
-                    {isImporting ? 'ĐANG LƯU...' : 'LƯU DỮ LIỆU'}
+                    {isImporting ? 'ĐANG LƯU...' : 'LƯU'}
                   </button>
 
                   {importMessage && (
@@ -1106,7 +1106,7 @@ export default function App() {
               className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-bold shadow-sm hover:shadow-md active:scale-95 transition-all duration-200"
             >
               <FilePlus className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="uppercase tracking-wider text-[10px] sm:text-sm">Nhập dữ liệu</span>
+              <span className="uppercase tracking-wider text-[10px] sm:text-sm">Thêm mới</span>
             </button>
             
             <button 
