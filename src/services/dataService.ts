@@ -43,6 +43,53 @@ export async function fetchWithFallback(url: string, isText = true) {
   throw new Error("Cannot fetch: " + url);
 }
 
+export async function checkDuplicateDocument(projectCode: string, dept: string, noiDungToCheck: string) {
+  if (!projectCode || !dept || !noiDungToCheck) return null;
+  const gid = SHEET_GIDS[dept];
+  if (!gid) return null;
+  
+  const htmlUrl = `https://docs.google.com/spreadsheets/d/14BF0RUfBq-Arl6ngVvD44fQnNayBEC1Xtz-RFgzA4GI/htmlview/sheet?headers=true&gid=${gid}&t=${Date.now()}`;
+  try {
+    const htmlText = await fetchWithFallback(htmlUrl) as string;
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlText, 'text/html');
+    
+    const rows = doc.querySelectorAll('table tbody tr');
+    
+    for (const row of Array.from(rows)) {
+      const cells = row.querySelectorAll('td');
+      if (cells.length >= 6) {
+        const maCT = cells[1].textContent?.trim();
+        const noiDung = cells[2].textContent?.replace(/\s+/g, ' ').trim();
+        
+        if (maCT === projectCode && noiDung === noiDungToCheck.replace(/\s+/g, ' ').trim()) {
+          const soVb = cells[3].textContent?.trim();
+          const ngayVb = cells[4].textContent?.trim();
+          
+          let fileUrl = cells[5].textContent?.trim();
+          const linkElement = cells[5].querySelector('a');
+          if (linkElement && linkElement.href) {
+            let href = linkElement.href;
+            if (href.includes('google.com/url?')) {
+              try {
+                const urlParams = new URLSearchParams(href.split('?')[1]);
+                const q = urlParams.get('q');
+                if (q) href = q;
+              } catch (e) {}
+            }
+            fileUrl = href;
+          }
+          
+          return { soVb, ngayVb, fileUrl };
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`Failed to check duplicate in sheet ${dept}`, e);
+  }
+  return null;
+}
+
 export async function loadProjectData(projectCode: string, templateDataCache?: string[][]) {
   // 1. Fetch template data if not provided
   let templateRows = templateDataCache;

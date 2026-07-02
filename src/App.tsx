@@ -3,7 +3,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx-js-style';
 import { Settings, RefreshCw, FilePlus, Database, Download, ExternalLink, AlertCircle, X, ChevronDown, Eye, Lock, User as UserIcon, LogIn, LogOut, Filter } from 'lucide-react';
 import { EVN_HCMC_LOGO } from "./assets/logo";
-import { loadProjectData } from "./services/dataService";
+import { loadProjectData, checkDuplicateDocument } from "./services/dataService";
 
 const SHEET_CSV_URL = 'https://docs.google.com/spreadsheets/d/14BF0RUfBq-Arl6ngVvD44fQnNayBEC1Xtz-RFgzA4GI/export?format=csv&gid=0';
 const PROJECTS_CSV_URL = 'https://docs.google.com/spreadsheets/d/14BF0RUfBq-Arl6ngVvD44fQnNayBEC1Xtz-RFgzA4GI/export?format=csv&gid=1152018861'; // Using gid for 'Thông tin theo MCT' if known, or gviz. Let's use gviz to be safe.
@@ -190,6 +190,7 @@ export default function App() {
   const [isImporting, setIsImporting] = useState(false);
   const [importMessage, setImportMessage] = useState<{type: 'error' | 'success', text: string} | null>(null);
   const [showSuccessDialog, setShowSuccessDialog] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<{noiDung: string, soVb: string, ngayVb: string, fileUrl: string} | null>(null);
   const [rawDropdownData, setRawDropdownData] = useState<{phongBan: string, noiDung: string}[]>([]);
 
   // Fetch Dropdown sheet content
@@ -257,19 +258,34 @@ export default function App() {
     }
   }, [showImportModal, projectInfo]);
 
-  const handleImportSubmit = async () => {
+  const handleImportSubmit = async (forceSave = false) => {
     if (!scriptUrl) {
       setImportMessage({ type: 'error', text: 'Vui lòng cấu hình Apps Script Web App URL.' });
       return;
     }
     
-    if (!importForm.maCongTrinh || !importForm.phongBan) {
-      setImportMessage({ type: 'error', text: 'Vui lòng điền mã công trình và phòng ban.' });
+    if (!importForm.maCongTrinh || !importForm.phongBan || !importForm.noiDung) {
+      setImportMessage({ type: 'error', text: 'Vui lòng điền mã công trình, phòng ban và nội dung.' });
       return;
     }
 
     setIsImporting(true);
     setImportMessage(null);
+    setDuplicateWarning(null);
+
+    if (!forceSave) {
+      const duplicateInfo = await checkDuplicateDocument(importForm.maCongTrinh, importForm.phongBan, importForm.noiDung);
+      if (duplicateInfo && (duplicateInfo.soVb || duplicateInfo.ngayVb || duplicateInfo.fileUrl)) {
+        setIsImporting(false);
+        setDuplicateWarning({
+          noiDung: importForm.noiDung,
+          soVb: duplicateInfo.soVb || '',
+          ngayVb: duplicateInfo.ngayVb || '',
+          fileUrl: duplicateInfo.fileUrl || ''
+        });
+        return;
+      }
+    }
 
     try {
       let base64File = '';
@@ -840,7 +856,7 @@ export default function App() {
                   </div>
 
                   <button
-                    onClick={handleImportSubmit}
+                    onClick={() => handleImportSubmit(false)}
                     disabled={isImporting}
                     className="w-full py-2.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 font-bold transition-colors disabled:bg-blue-400 mt-2 shadow-sm"
                   >
@@ -870,6 +886,66 @@ export default function App() {
                   HOÀN TẤT
                 </button>
               </div>
+
+              {/* Duplicate Warning Dialog Overlay */}
+              {duplicateWarning && (
+                <div className="absolute inset-0 z-[70] flex items-center justify-center bg-white/70 backdrop-blur-sm rounded-2xl p-4">
+                  <div className="bg-white p-6 rounded-xl shadow-2xl border border-amber-200 flex flex-col w-full max-w-md mx-auto animate-in fade-in zoom-in duration-200">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-10 h-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center shrink-0">
+                        <AlertCircle className="w-6 h-6" />
+                      </div>
+                      <h3 className="text-lg font-bold text-slate-800">Cảnh báo: Đã có văn bản!</h3>
+                    </div>
+                    
+                    <p className="text-sm text-slate-600 mb-4">
+                      Một văn bản có cùng nội dung đã được nhập trước đó. Thông tin chi tiết:
+                    </p>
+                    
+                    <div className="bg-slate-50 p-4 rounded-lg border border-slate-200 space-y-3 text-sm mb-6">
+                      <div>
+                        <span className="text-slate-500 font-semibold block mb-0.5">Nội dung văn bản:</span>
+                        <span className="text-slate-800 font-medium">{duplicateWarning.noiDung}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <span className="text-slate-500 font-semibold block mb-0.5">Số VB:</span>
+                          <span className="text-slate-800 font-medium">{duplicateWarning.soVb || <span className="italic text-slate-400">Không có</span>}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-500 font-semibold block mb-0.5">Ngày VB:</span>
+                          <span className="text-slate-800 font-medium">{duplicateWarning.ngayVb || <span className="italic text-slate-400">Không có</span>}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <span className="text-slate-500 font-semibold block mb-0.5">File đính kèm:</span>
+                        {duplicateWarning.fileUrl && duplicateWarning.fileUrl.startsWith('http') ? (
+                          <a href={duplicateWarning.fileUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:underline inline-flex items-center gap-1">
+                            <Eye className="w-3.5 h-3.5" /> Xem file
+                          </a>
+                        ) : (
+                          <span className="italic text-slate-400">{duplicateWarning.fileUrl || 'Không có'}</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-3">
+                      <button 
+                        onClick={() => setDuplicateWarning(null)}
+                        className="flex-1 py-2.5 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 font-bold transition-colors"
+                      >
+                        Hủy bỏ
+                      </button>
+                      <button 
+                        onClick={() => handleImportSubmit(true)}
+                        className="flex-1 py-2.5 bg-amber-500 text-white rounded-lg hover:bg-amber-600 font-bold transition-colors shadow-sm"
+                      >
+                        Vẫn tiếp tục lưu
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Success Dialog Overlay */}
               {showSuccessDialog && (
@@ -946,10 +1022,11 @@ export default function App() {
                 }
                 setShowImportModal(true);
               }}
-              className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 font-bold shadow-sm hover:shadow-md active:scale-95 transition-all duration-200"
+              className="group relative overflow-hidden flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-8 sm:py-3.5 bg-gradient-to-br from-blue-600 to-blue-700 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 ring-1 ring-inset ring-white/20 hover:shadow-xl hover:shadow-blue-500/40 hover:-translate-y-0.5 active:scale-95 transition-all duration-300"
             >
-              <FilePlus className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="uppercase tracking-wider text-[10px] sm:text-sm">Thêm mới</span>
+              <div className="absolute inset-0 w-1/2 bg-gradient-to-r from-transparent via-white/40 to-transparent group-hover:animate-shine opacity-0 group-hover:opacity-100 transition-opacity" />
+              <FilePlus className="w-4 h-4 sm:w-5 sm:h-5 relative z-10" />
+              <span className="uppercase tracking-wider text-[10px] sm:text-sm relative z-10">Thêm mới</span>
             </button>
             
             <button 
@@ -1109,10 +1186,11 @@ export default function App() {
                   alert('Có lỗi xảy ra khi tạo file Excel. Vui lòng thử lại.');
                 }
               }}
-              className="flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-6 sm:py-3 bg-white text-emerald-700 border border-emerald-200 rounded-xl hover:bg-emerald-50 font-bold shadow-sm hover:shadow-md active:scale-95 transition-all duration-200 cursor-pointer"
+              className="group relative overflow-hidden flex flex-col sm:flex-row items-center justify-center gap-1.5 sm:gap-2 px-3 py-2.5 sm:px-8 sm:py-3.5 bg-white text-emerald-600 border border-emerald-200 rounded-xl font-bold shadow-md shadow-slate-200/50 hover:shadow-xl hover:shadow-emerald-500/20 hover:border-emerald-300 hover:-translate-y-0.5 active:scale-95 transition-all duration-300 cursor-pointer"
             >
-              <Download className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span className="uppercase tracking-wider text-[10px] sm:text-sm">Xuất Excel</span>
+              <div className="absolute inset-0 w-1/2 bg-gradient-to-r from-transparent via-emerald-100/50 to-transparent group-hover:animate-shine opacity-0 group-hover:opacity-100 transition-opacity" />
+              <Download className="w-4 h-4 sm:w-5 sm:h-5 relative z-10" />
+              <span className="uppercase tracking-wider text-[10px] sm:text-sm relative z-10">Xuất Excel</span>
             </button>
           </div>
         </div>
